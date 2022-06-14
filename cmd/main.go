@@ -49,7 +49,7 @@ You can select a specific go version or even set version for directories.`,
 				var release string
 				if ctx.NArg() == 0 {
 					if !ctx.Bool("latest") {
-						return errors.New("a release is required if \"--latest\" is not passed")
+						return errors.New("a release is required if \"--latest|--lts\" is not passed")
 					}
 					release = "lts"
 				} else {

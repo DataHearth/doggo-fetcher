@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/google/go-github/v45/github"
@@ -32,37 +33,100 @@ func NewTags(release string, ctx context.Context) Tags {
 // checkReleaseExists retrieves tags from "golang/go" and check whether
 // the given release exists in it
 func (t Tags) CheckReleaseExists(beta, rc bool) (string, error) {
-	var tags []*github.RepositoryTag
-	var response *github.Response
-	var err error
+	if t.release == "lts" {
+		return t.getLatestRelease(beta, rc)
+	}
 
-	tags, response, err = t.client.Repositories.ListTags(t.ctx, "golang", "go", nil)
+	refs, err := t.getTagsRef()
 	if err != nil {
+		if err == ErrEmptyTags {
+			return "", nil
+		}
 		return "", err
 	}
-	if response.StatusCode != http.StatusOK {
-		return "", ErrBadResponse
-	}
-	if len(tags) == 0 {
-		return "", ErrEmptyTags
-	}
-
-	if t.release == "lts" {
-		return *tags[len(tags)-1].Name, nil
-	}
-
-	for i, tag := range tags {
+	for i, ref := range refs {
 		userRelease := fmt.Sprintf("go%s", t.release)
-		if strings.Contains(*tag.Name, userRelease) {
-			if (!beta && strings.Contains(*tag.Name, "beta")) || (!rc && strings.Contains(*tag.Name, "rc")) {
+		tag := strings.Split(*ref.Ref, "/")[2]
+
+		if strings.Contains(tag, userRelease) {
+			if (!beta && strings.Contains(tag, "beta")) || (!rc && strings.Contains(tag, "rc")) {
 				continue
 			}
 
-			if strings.Contains(*tags[i+1].Name, userRelease) {
+			if beta && strings.Contains(tag, "beta") {
+				if strings.Contains(*refs[i+1].Ref, userRelease) && strings.Contains(*refs[i+1].Ref, "beta") {
+					continue
+				} else {
+					return tag, nil
+				}
+			}
+
+			if rc && strings.Contains(tag, "rc") {
+				if strings.Contains(*refs[i+1].Ref, userRelease) && strings.Contains(*refs[i+1].Ref, "rc") {
+					continue
+				} else {
+					return tag, nil
+				}
+			}
+
+			if strings.Contains(*refs[i+1].Ref, userRelease) {
 				continue
 			}
 
+			return tag, nil
+		}
+	}
+
+	return "", nil
+}
+
+// getTags retrieves 100 tags from parameter PAGE
+//
+// It returns a list of tags reference if there is as least one tag in the result and an error otherwise
+func (t Tags) getTagsRef() ([]*github.Reference, error) {
+	refs, response, err := t.client.Git.ListMatchingRefs(t.ctx, "golang", "go", &github.ReferenceListOptions{
+		Ref: "tags/go",
+	})
+	if err != nil {
+		return nil, err
+	}
+	if response.StatusCode != http.StatusOK {
+		fmt.Fprintf(os.Stderr, "non success github status code %d\n", response.StatusCode)
+		return nil, ErrBadResponse
+	}
+	if len(refs) == 0 {
+		return nil, ErrEmptyTags
+	}
+
+	return refs, nil
+}
+
+func (t Tags) getLatestRelease(beta, rc bool) (string, error) {
+	refs, err := t.getTagsRef()
+	if err != nil {
+		if err == ErrEmptyTags {
 			return "", nil
+		}
+		return "", err
+	}
+
+	fmt.Printf("len(tags): %v\n", len(refs))
+	for i := len(refs) - 1; i >= 0; i-- {
+		fmt.Printf("[%d] tags[i].Name: %v\n", i, *refs[i].Ref)
+		if (!beta && strings.Contains(*refs[i].Ref, "beta")) || (!rc && strings.Contains(*refs[i].Ref, "rc")) {
+			continue
+		}
+
+		if beta && strings.Contains(*refs[i].Ref, "beta") {
+			return strings.Split(*refs[i].Ref, "/")[2], nil
+		}
+
+		if rc && strings.Contains(*refs[i].Ref, "rc") {
+			return strings.Split(*refs[i].Ref, "/")[2], nil
+		}
+
+		if !strings.Contains(*refs[i].Ref, "beta") && !strings.Contains(*refs[i].Ref, "rc") {
+			return strings.Split(*refs[i].Ref, "/")[2], nil
 		}
 	}
 
