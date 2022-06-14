@@ -57,7 +57,7 @@ You can select a specific go version or even set version for directories.`,
 				}
 
 				ghTags := pkg.NewTags(release, ctx.Context)
-				release, err := ghTags.CheckReleaseExists(ctx.Bool("beta"), ctx.Bool("rc"))
+				release, err := ghTags.GetRelease(ctx.Bool("beta"), ctx.Bool("rc"))
 				if err != nil {
 					return err
 				}

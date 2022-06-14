@@ -16,6 +16,12 @@ var (
 	ErrEmptyTags   = errors.New("no tags found")
 )
 
+type TagsAction interface {
+	CheckReleaseExists(beta, rc bool) (string, error)
+	getTagsRef() ([]*github.Reference, error)
+	getLatestRelease(beta, rc bool) (string, error)
+}
+
 type Tags struct {
 	release string
 	client  github.Client
@@ -30,11 +36,13 @@ func NewTags(release string, ctx context.Context) Tags {
 	}
 }
 
-// checkReleaseExists retrieves tags from "golang/go" and check whether
+// GetRelease retrieves tags from "golang/go" and check whether
 // the given release exists in it
-func (t Tags) CheckReleaseExists(beta, rc bool) (string, error) {
+//
+// Returns the found release or an error
+func (t Tags) GetRelease(beta, rc bool) (string, error) {
 	if t.release == "lts" {
-		return t.getLatestRelease(beta, rc)
+		return t.getLatestTag(beta, rc)
 	}
 
 	refs, err := t.getTagsRef()
@@ -80,9 +88,10 @@ func (t Tags) CheckReleaseExists(beta, rc bool) (string, error) {
 	return "", nil
 }
 
-// getTags retrieves 100 tags from parameter PAGE
+// getTagsRef retrieves all tags from golang/go
 //
-// It returns a list of tags reference if there is as least one tag in the result and an error otherwise
+// Returns a list of tags reference if there is as least one
+// or an error otherwise.
 func (t Tags) getTagsRef() ([]*github.Reference, error) {
 	refs, response, err := t.client.Git.ListMatchingRefs(t.ctx, "golang", "go", &github.ReferenceListOptions{
 		Ref: "tags/go",
@@ -101,7 +110,11 @@ func (t Tags) getTagsRef() ([]*github.Reference, error) {
 	return refs, nil
 }
 
-func (t Tags) getLatestRelease(beta, rc bool) (string, error) {
+// getLatestTag gather find the latest version of golang.
+// beta and rc version can be specified.
+//
+// Returns the latest release or an error
+func (t Tags) getLatestTag(beta, rc bool) (string, error) {
 	refs, err := t.getTagsRef()
 	if err != nil {
 		if err == ErrEmptyTags {
