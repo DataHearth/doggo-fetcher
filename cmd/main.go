@@ -1,9 +1,12 @@
 package main
 
 import (
+	"crypto/sha256"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
+	"path/filepath"
 
 	"github.com/datahearth/doggo-fetcher/pkg"
 	"github.com/urfave/cli/v2"
@@ -11,21 +14,23 @@ import (
 
 var app = &cli.App{
 	Name:  "dg",
-	Usage: "I bring you your latest Golang version with ease and efficiency (like a stick) !",
-	Description: `Doggo-fetcher is a utility tool that manage for you your Golang version.
-You can select a specific go version or even set version for directories.`,
+	Usage: "I bring you your latest GoLang release with ease and efficiency (like a stick) !",
+	Description: `Doggo-fetcher is a utility tool that manage for you your installed GoLang releases.
+You can select a specific GoLang release or even set a specific one for directories.`,
 	EnableBashCompletion: true,
-	Authors: []*cli.Author{{
-		Name:  "Antoine <DataHearth> Langlois",
-		Email: "antoine.l@antoine-langlois.net",
-	}},
+	Authors: []*cli.Author{
+		{
+			Name:  "Antoine <DataHearth> Langlois",
+			Email: "antoine.l@antoine-langlois.net",
+		},
+	},
 	Suggest: true,
 	Version: "0.1.0",
 	Commands: []*cli.Command{
 		{
 			Name:        "install",
-			Usage:       "Download a given release",
-			Description: "Download a given release and set it as first release to be use",
+			Usage:       "Download a release",
+			Description: "Download a release. If the given release is already stored, nothing will happen.",
 			Flags: []cli.Flag{
 				&cli.BoolFlag{
 					Name:  "keep-release",
@@ -34,7 +39,7 @@ You can select a specific go version or even set version for directories.`,
 				&cli.BoolFlag{
 					Name:    "latest",
 					Aliases: []string{"lts"},
-					Usage:   "Download and install the latest release",
+					Usage:   "Use latest release",
 				},
 				&cli.BoolFlag{
 					Name:  "rc",
@@ -51,7 +56,7 @@ You can select a specific go version or even set version for directories.`,
 					if !ctx.Bool("latest") {
 						return errors.New("a release is required if \"--latest|--lts\" is not passed")
 					}
-					release = "lts"
+					release = pkg.LTS
 				} else {
 					release = ctx.Args().First()
 				}
@@ -62,8 +67,43 @@ You can select a specific go version or even set version for directories.`,
 					return err
 				}
 
-				fmt.Printf("release: %v\n", release)
+				dlRelease := pkg.NewDownload(release, ctx.Bool("keep-release"))
+				releasePath, err := dlRelease.DownloadRelease()
+				if err != nil {
+					return err
+				}
 
+				extractedRelease, err := pkg.ExtractRelease(releasePath, release)
+				if err != nil {
+					return err
+				}
+
+				totalSum := sha256.New()
+				err = filepath.Walk(extractedRelease, func(path string, info fs.FileInfo, err error) error {
+					if err != nil {
+						return err
+					}
+					if !info.Mode().IsRegular() || info.IsDir() {
+						return nil
+					}
+
+					b, err := os.ReadFile(path)
+					if err != nil {
+						return err
+					}
+				})
+
+				// todo: install release
+				return nil
+			},
+		},
+		{
+			Name:  "use",
+			Usage: "Set a specific golang version",
+			Description: `Use a specific golang version as primary golang binary for the user.
+	If the version is not already downloaded, it'll downloaded and installed automatically.`,
+			Action: func(ctx *cli.Context) error {
+				fmt.Println("to be implemented!")
 				return nil
 			},
 		},
@@ -73,6 +113,15 @@ You can select a specific go version or even set version for directories.`,
 		return nil
 	},
 }
+
+// todo: use (download if not present, install and set in path)
+// todo: uninstall
+// todo: ls (list installed-releases)
+// todo: ls-remote (list remote releases)
+// todo: exec (without setting release=
+// todo: alias
+// todo: run-bg (check each 10mins)
+// todo: auto-use (automatically switch when changing directory)
 
 func main() {
 	if err := app.Run(os.Args); err != nil {

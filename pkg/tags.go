@@ -11,15 +11,17 @@ import (
 	"github.com/google/go-github/v45/github"
 )
 
+const LTS = "lts"
+
 var (
 	ErrBadResponse = errors.New("github API responde with a non success code")
 	ErrEmptyTags   = errors.New("no tags found")
 )
 
 type TagsAction interface {
-	CheckReleaseExists(beta, rc bool) (string, error)
+	GetRelease(beta, rc bool) (string, error)
 	getTagsRef() ([]*github.Reference, error)
-	getLatestRelease(beta, rc bool) (string, error)
+	getLatestTag(beta, rc bool) (string, error)
 }
 
 type Tags struct {
@@ -28,7 +30,7 @@ type Tags struct {
 	ctx     context.Context
 }
 
-func NewTags(release string, ctx context.Context) Tags {
+func NewTags(release string, ctx context.Context) TagsAction {
 	return Tags{
 		release: release,
 		client:  *github.NewClient(nil),
@@ -100,7 +102,7 @@ func (t Tags) getTagsRef() ([]*github.Reference, error) {
 		return nil, err
 	}
 	if response.StatusCode != http.StatusOK {
-		fmt.Fprintf(os.Stderr, "non success github status code %d\n", response.StatusCode)
+		fmt.Fprintf(os.Stderr, "%s: %d\n", ErrBadResponse.Error(), response.StatusCode)
 		return nil, ErrBadResponse
 	}
 	if len(refs) == 0 {
@@ -123,9 +125,7 @@ func (t Tags) getLatestTag(beta, rc bool) (string, error) {
 		return "", err
 	}
 
-	fmt.Printf("len(tags): %v\n", len(refs))
 	for i := len(refs) - 1; i >= 0; i-- {
-		fmt.Printf("[%d] tags[i].Name: %v\n", i, *refs[i].Ref)
 		if (!beta && strings.Contains(*refs[i].Ref, "beta")) || (!rc && strings.Contains(*refs[i].Ref, "rc")) {
 			continue
 		}
