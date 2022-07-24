@@ -2,20 +2,12 @@ package pkg
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"os"
 	"strings"
 
 	"github.com/google/go-github/v45/github"
-)
-
-const LTS = "lts"
-
-var (
-	ErrBadResponse = errors.New("github API responde with a non success code")
-	ErrEmptyTags   = errors.New("no tags found")
 )
 
 type TagsAction interface {
@@ -43,7 +35,7 @@ func NewTags(release string, ctx context.Context) TagsAction {
 //
 // Returns the found release or an error
 func (t Tags) GetRelease(beta, rc bool) (string, error) {
-	if t.release == "lts" {
+	if t.release == LTS {
 		return t.getLatestTag(beta, rc)
 	}
 
